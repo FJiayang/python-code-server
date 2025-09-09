@@ -60,14 +60,19 @@ RUN \
     # Install 'uv' (the fast Python package manager).
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
     \
-    # Create the configuration directory for uv and set the index-url via uv.toml.
+    # Create the configuration directory for uv.
     mkdir -p ~/.config/uv && \
-    echo -e '[tool.uv]\nindex-url = "https://mirrors.aliyun.com/pypi/simple"' > ~/.config/uv/uv.toml && \
+    \
+    ### --- [ THE FIX IS HERE - Using a more robust method ] --- ###
+    # Create the uv.toml file using a "here document", which is reliable across all shells.
+    cat <<EOF > ~/.config/uv/uv.toml && \
+[tool.uv]
+index-url = "https://mirrors.aliyun.com/pypi/simple"
+EOF
     \
     # Create the default conda environment.
     conda create -n py${PYTHON_VERSION} python=${PYTHON_VERSION} -y && \
     \
-    ### --- [ MODIFICATION IS HERE ] --- ###
     # Pre-install a minimal set of core data science libraries.
     uv pip install --python=${CONDA_DIR}/envs/py${PYTHON_VERSION}/bin/python \
         numpy \
