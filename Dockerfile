@@ -63,14 +63,13 @@ RUN \
     # Create the configuration directory for uv.
     mkdir -p ~/.config/uv && \
     \
-    ### --- [ THE FIX IS HERE - Using a more robust method ] --- ###
-    # Create the uv.toml file using a "here document", which is reliable across all shells.
+    # Create the uv.toml file using a "here document".
     cat <<EOF > ~/.config/uv/uv.toml && \
 [tool.uv]
 index-url = "https://mirrors.aliyun.com/pypi/simple"
 EOF
-    \
-    # Create the default conda environment.
+    # --- [ THE FIX IS HERE ] ---
+    # The '&& \' chaining operator MUST come AFTER the 'EOF' marker.
     conda create -n py${PYTHON_VERSION} python=${PYTHON_VERSION} -y && \
     \
     # Pre-install a minimal set of core data science libraries.
