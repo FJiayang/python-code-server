@@ -65,12 +65,16 @@ RUN \
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
     \
     # Configure Conda to use Tsinghua University mirrors for faster package downloads.
-    conda config --set show_channel_urls true && \
-    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main && \
-    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r && \
-    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2 && \
+    # We add our desired channels first.
     conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/conda-forge/ && \
-    conda config --set-default-channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main && \
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/ && \
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r/ && \
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2/ && \
+    # --- [ THE FIX IS HERE ] ---
+    # Then, we tell conda to NOT use the built-in 'defaults' channels.
+    conda config --set nodefaults true && \
+    # (Optional) We can verify the channel configuration.
+    conda config --set show_channel_urls true && \
     \
     # Create the default conda environment. This will be fast due to the mirror.
     conda create -n py${PYTHON_VERSION} python=${PYTHON_VERSION} -y && \
