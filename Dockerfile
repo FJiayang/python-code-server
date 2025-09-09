@@ -1,5 +1,5 @@
 # ==============================================================================
-# Dockerfile for a professional, optimized code-server development environment
+# Dockerfile for a LIGHTWEIGHT, professional, and optimized code-server environment
 #
 # Features:
 # - Base: code-server (latest)
@@ -8,6 +8,7 @@
 # - Optimization (China):
 #   - Timezone: Asia/Shanghai
 #   - PyPI Mirror: Alibaba Cloud (configured via uv.toml - BEST PRACTICE)
+# - Pre-installed Libraries: A minimal set (numpy, pandas, matplotlib)
 # - Convenience: Auto-activates conda environment in the terminal
 # ==============================================================================
 
@@ -19,7 +20,6 @@ ARG MINIFORGE_VERSION=23.11.0-0
 ARG PYTHON_VERSION=3.11
 
 # Step 3: Define environment variables for paths and timezone.
-# We no longer need UV_INDEX_URL here.
 ENV CONDA_DIR=/opt/conda
 ENV UV_DIR=/home/coder/.local
 ENV PATH=${CONDA_DIR}/bin:${UV_DIR}/bin:${PATH}
@@ -55,31 +55,24 @@ RUN \
 # Step 6: Switch back to the standard, non-root 'coder' user.
 USER coder
 
-# Step 7: As the 'coder' user, install 'uv', configure it via uv.toml, and create the environment.
+# Step 7: As the 'coder' user, install 'uv', configure it, and create the environment.
 RUN \
     # Install 'uv' (the fast Python package manager).
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
     \
-    ### --- [ THE NEW AND RECOMMENDED METHOD ] --- ###
-    # Create the configuration directory for uv.
+    # Create the configuration directory for uv and set the index-url via uv.toml.
     mkdir -p ~/.config/uv && \
-    # Create the uv.toml file and set the index-url.
-    # This is a persistent and official way to configure uv.
-    # The `echo -e` command allows for writing multi-line content easily.
     echo -e '[tool.uv]\nindex-url = "https://mirrors.aliyun.com/pypi/simple"' > ~/.config/uv/uv.toml && \
     \
-    # Create the default conda environment using Conda's default channels.
+    # Create the default conda environment.
     conda create -n py${PYTHON_VERSION} python=${PYTHON_VERSION} -y && \
     \
-    # Pre-install common Python packages into the new environment using 'uv'.
-    # It will now automatically use the configuration from ~/.config/uv/uv.toml.
+    ### --- [ MODIFICATION IS HERE ] --- ###
+    # Pre-install a minimal set of core data science libraries.
     uv pip install --python=${CONDA_DIR}/envs/py${PYTHON_VERSION}/bin/python \
         numpy \
         pandas \
-        matplotlib \
-        scikit-learn \
-        jupyterlab \
-        requests && \
+        matplotlib && \
     \
     # Configure the shell to automatically activate this environment on login.
     echo "conda activate py${PYTHON_VERSION}" >> ~/.bashrc
