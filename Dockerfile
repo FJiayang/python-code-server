@@ -1,5 +1,5 @@
 # ==============================================================================
-# Dockerfile for a streamlined, optimized code-server development environment
+# Dockerfile for a professional, optimized code-server development environment
 #
 # Features:
 # - Base: code-server (latest)
@@ -7,7 +7,7 @@
 # - Package Manager: 'uv' (ultra-fast) and 'conda'
 # - Optimization (China):
 #   - Timezone: Asia/Shanghai
-#   - PyPI Mirror: Alibaba Cloud (for uv/pip)
+#   - PyPI Mirror: Alibaba Cloud (configured via uv.toml - BEST PRACTICE)
 # - Convenience: Auto-activates conda environment in the terminal
 # ==============================================================================
 
@@ -18,15 +18,12 @@ FROM codercom/code-server:latest
 ARG MINIFORGE_VERSION=23.11.0-0
 ARG PYTHON_VERSION=3.11
 
-# Step 3: Define environment variables for paths and configurations.
+# Step 3: Define environment variables for paths and timezone.
+# We no longer need UV_INDEX_URL here.
 ENV CONDA_DIR=/opt/conda
 ENV UV_DIR=/home/coder/.local
-# Add bin directories of Conda and UV to the system's PATH.
 ENV PATH=${CONDA_DIR}/bin:${UV_DIR}/bin:${PATH}
-# Set the timezone.
 ENV TZ=Asia/Shanghai
-# Configure UV/pip to use the Alibaba Cloud mirror. This is the core of the optimization.
-ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
 
 # Step 4: Switch to the ROOT user for system-level installations.
 USER root
@@ -58,16 +55,24 @@ RUN \
 # Step 6: Switch back to the standard, non-root 'coder' user.
 USER coder
 
-# Step 7: As the 'coder' user, install 'uv' and create the development environment.
+# Step 7: As the 'coder' user, install 'uv', configure it via uv.toml, and create the environment.
 RUN \
     # Install 'uv' (the fast Python package manager).
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    \
+    ### --- [ THE NEW AND RECOMMENDED METHOD ] --- ###
+    # Create the configuration directory for uv.
+    mkdir -p ~/.config/uv && \
+    # Create the uv.toml file and set the index-url.
+    # This is a persistent and official way to configure uv.
+    # The `echo -e` command allows for writing multi-line content easily.
+    echo -e '[tool.uv]\nindex-url = "https://mirrors.aliyun.com/pypi/simple"' > ~/.config/uv/uv.toml && \
     \
     # Create the default conda environment using Conda's default channels.
     conda create -n py${PYTHON_VERSION} python=${PYTHON_VERSION} -y && \
     \
     # Pre-install common Python packages into the new environment using 'uv'.
-    # This will automatically and quickly use the Alibaba Cloud PyPI mirror.
+    # It will now automatically use the configuration from ~/.config/uv/uv.toml.
     uv pip install --python=${CONDA_DIR}/envs/py${PYTHON_VERSION}/bin/python \
         numpy \
         pandas \
