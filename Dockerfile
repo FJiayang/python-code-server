@@ -63,13 +63,12 @@ RUN \
     # Create the configuration directory for uv.
     mkdir -p ~/.config/uv && \
     \
-    # Create the uv.toml file using a "here document".
-    cat <<EOF > ~/.config/uv/uv.toml && \
-[tool.uv]
-index-url = "https://mirrors.aliyun.com/pypi/simple"
-EOF
-    # --- [ THE FIX IS HERE ] ---
-    # The '&& \' chaining operator MUST come AFTER the 'EOF' marker.
+    ### --- [ THE DEFINITIVE FIX IS HERE ] --- ###
+    # Use 'printf' to create the uv.toml file. This is a single-line command
+    # from the shell's perspective and avoids all Docker parsing issues.
+    printf '[tool.uv]\nindex-url = "https://mirrors.aliyun.com/pypi/simple"\n' > ~/.config/uv/uv.toml && \
+    \
+    # Create the default conda environment.
     conda create -n py${PYTHON_VERSION} python=${PYTHON_VERSION} -y && \
     \
     # Pre-install a minimal set of core data science libraries.
