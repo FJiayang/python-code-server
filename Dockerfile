@@ -1,26 +1,21 @@
 # ==============================================================================
-# Dockerfile for a professionally architected, optimized code-server environment
+# Dockerfile for a "Batteries-Included", professional, and optimized code-server environment
 #
 # Architecture:
-# - Installation by 'root': The entire Python/Conda toolchain is installed
-#   by the root user into a system-wide location (/opt/conda).
-# - Usage by 'coder': The non-root 'coder' user is configured to seamlessly
-#   use this immutable, pre-built environment.
+# - Installation by 'root': The entire Python/Conda toolchain is installed system-wide.
+# - Usage by 'coder': The non-root 'coder' user uses this immutable environment.
 #
 # Features:
 # - Base: code-server (latest)
-# - Python: Miniforge (Conda) with a pre-created Python 3.11 environment
-# - Package Manager: 'uv' (installed via Conda for consistency)
-# - Root & Coder Access: 'python', 'conda', 'uv' are available for all users.
-# - Optimization (China):
-#   - Timezone: Asia/Shanghai
-#   - PyPI Mirror: Alibaba Cloud (configured for the 'coder' user)
-# - Pre-installed Libraries: A minimal set (numpy, pandas, matplotlib)
-# - Convenience: Auto-activates conda environment for the 'coder' user.
+# - IDE Enhancement: Pre-installs essential Python VS Code extensions.
+# - Python: Miniforge (Conda) with a pre-created Python 3.11 environment.
+# - Package Manager: 'uv' (installed via Conda).
+# - Root & Coder Access: All tools are available for all users.
+# - Optimization (China): Timezone set to Asia/Shanghai, PyPI mirror configured.
+# - Pre-installed Libraries: A minimal set (numpy, pandas, matplotlib).
 # ==============================================================================
 
 # --- Build Stage ---
-# FIX: Use uppercase 'AS' for better style consistency.
 FROM codercom/code-server:latest AS builder
 
 # Set arguments for tool versions.
@@ -81,13 +76,21 @@ RUN \
     mkdir -p ~/.config/uv && \
     printf 'index-url = "https://mirrors.aliyun.com/pypi/simple"\n' > ~/.config/uv/uv.toml && \
     \
-    # 2. Configure the user's shell to auto-activate the system-wide environment.
+    ### --- [ NEW FEATURE: PRE-INSTALL EXTENSIONS ] --- ###
+    # 2. Install essential VS Code extensions for a rich Python experience.
+    # This must be run as the 'coder' user.
+    code-server --install-extension ms-python.python \
+                --install-extension frhtylcn.pythonsnippets \
+                --install-extension dongli.python-preview \
+                --install-extension njqdev.vscode-python-typehint \
+                --install-extension LittleFoxTeam.vscode-python-test-adapter && \
+    \
+    # 3. Configure the user's shell to auto-activate the system-wide environment.
     conda init bash && \
     echo "conda activate py${PYTHON_VERSION}" >> ~/.bashrc
 
 
 # --- Verification and Final Stage ---
-# This stage ensures both root and coder environments are correctly configured.
 FROM builder
 
 # Final check as ROOT.
@@ -100,11 +103,11 @@ RUN echo "Verifying root environment..." && \
 # Final check as CODER.
 USER coder
 RUN echo "Verifying coder environment..." && \
-    ### --- [ THE FINAL FIX IS HERE ] --- ###
-    # Use the POSIX-compliant dot ('.') instead of the bash-specific 'source'.
     . ~/.bashrc && \
     python --version && \
     uv --version && \
+    # Also verify that extensions are installed by checking the directory.
+    ls -l ~/.local/share/code-server/extensions && \
     echo "Coder environment check PASSED!"
 
 # The base image's CMD is inherited automatically.
