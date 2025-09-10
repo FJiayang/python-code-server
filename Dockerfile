@@ -20,14 +20,14 @@
 # ==============================================================================
 
 # --- Build Stage ---
-FROM codercom/code-server:latest as builder
+# FIX: Use uppercase 'AS' for better style consistency.
+FROM codercom/code-server:latest AS builder
 
 # Set arguments for tool versions.
 ARG MINIFORGE_VERSION=23.11.0-0
 ARG PYTHON_VERSION=3.11
 
 # Define global environment variables for paths and timezone.
-# This makes the toolchain available to ALL subsequent users (root and coder).
 ENV CONDA_DIR=/opt/conda
 ENV PATH=${CONDA_DIR}/bin:${PATH}
 ENV TZ=Asia/Shanghai
@@ -50,16 +50,16 @@ RUN \
     && /bin/bash miniforge.sh -b -p ${CONDA_DIR} \
     && rm miniforge.sh \
     \
-    # 3. Initialize Conda for the root's shell (useful for subsequent RUN commands).
+    # 3. Initialize Conda for the root's shell.
     && conda init bash && . /root/.bashrc \
     \
-    # 4. Install 'uv' into the base conda environment for system-wide access.
+    # 4. Install 'uv' into the base conda environment.
     && conda install -n base uv -c conda-forge -y \
     \
     # 5. Create the target Python environment.
     && conda create -n py${PYTHON_VERSION} python=${PYTHON_VERSION} -y \
     \
-    # 6. Install core libraries into the new environment using 'uv'.
+    # 6. Install core libraries into the new environment.
     && uv pip install --python=${CONDA_DIR}/envs/py${PYTHON_VERSION}/bin/python \
         numpy \
         pandas \
@@ -100,11 +100,11 @@ RUN echo "Verifying root environment..." && \
 # Final check as CODER.
 USER coder
 RUN echo "Verifying coder environment..." && \
-    # We must source .bashrc to load the 'conda activate' alias in a non-interactive shell.
-    source ~/.bashrc && \
+    ### --- [ THE FINAL FIX IS HERE ] --- ###
+    # Use the POSIX-compliant dot ('.') instead of the bash-specific 'source'.
+    . ~/.bashrc && \
     python --version && \
     uv --version && \
     echo "Coder environment check PASSED!"
 
 # The base image's CMD is inherited automatically.
-# No need to specify it again.
