@@ -7,7 +7,7 @@
 # - Package Manager: 'uv' (ultra-fast) and 'conda'
 # - Optimization (China):
 #   - Timezone: Asia/Shanghai
-#   - PyPI Mirror: Alibaba Cloud (configured via uv.toml - BEST PRACTICE)
+#   - PyPI Mirror: Alibaba Cloud (configured via uv.toml - CORRECT FORMAT)
 # - Pre-installed Libraries: A minimal set (numpy, pandas, matplotlib)
 # - Convenience: Auto-activates conda environment in the terminal
 # ==============================================================================
@@ -63,15 +63,16 @@ RUN \
     # Create the configuration directory for uv.
     mkdir -p ~/.config/uv && \
     \
-    ### --- [ THE DEFINITIVE FIX IS HERE ] --- ###
-    # Use 'printf' to create the uv.toml file. This is a single-line command
-    # from the shell's perspective and avoids all Docker parsing issues.
-    printf '[tool.uv]\nindex-url = "https://mirrors.aliyun.com/pypi/simple"\n' > ~/.config/uv/uv.toml && \
+    ### --- [ THE REAL, FINAL FIX IS HERE ] --- ###
+    # Create the uv.toml with the CORRECT format for a global user config.
+    # It does NOT use the [tool.uv] section header.
+    printf 'index-url = "https://mirrors.aliyun.com/pypi/simple"\n' > ~/.config/uv/uv.toml && \
     \
     # Create the default conda environment.
     conda create -n py${PYTHON_VERSION} python=${PYTHON_VERSION} -y && \
     \
     # Pre-install a minimal set of core data science libraries.
+    # This command will now succeed as uv can correctly parse its config.
     uv pip install --python=${CONDA_DIR}/envs/py${PYTHON_VERSION}/bin/python \
         numpy \
         pandas \
