@@ -1,84 +1,110 @@
 # ==============================================================================
-# Dockerfile for a LIGHTWEIGHT, professional, and optimized code-server environment
+# Dockerfile for a professionally architected, optimized code-server environment
+#
+# Architecture:
+# - Installation by 'root': The entire Python/Conda toolchain is installed
+#   by the root user into a system-wide location (/opt/conda).
+# - Usage by 'coder': The non-root 'coder' user is configured to seamlessly
+#   use this immutable, pre-built environment.
 #
 # Features:
 # - Base: code-server (latest)
 # - Python: Miniforge (Conda) with a pre-created Python 3.11 environment
-# - Package Manager: 'uv' (ultra-fast) and 'conda'
+# - Package Manager: 'uv' (installed via Conda for consistency)
+# - Root & Coder Access: 'python', 'conda', 'uv' are available for all users.
 # - Optimization (China):
 #   - Timezone: Asia/Shanghai
-#   - PyPI Mirror: Alibaba Cloud (configured via uv.toml - CORRECT FORMAT)
+#   - PyPI Mirror: Alibaba Cloud (configured for the 'coder' user)
 # - Pre-installed Libraries: A minimal set (numpy, pandas, matplotlib)
-# - Convenience: Auto-activates conda environment in the terminal
+# - Convenience: Auto-activates conda environment for the 'coder' user.
 # ==============================================================================
 
-# Step 1: Start from the official code-server base image.
-FROM codercom/code-server:latest
+# --- Build Stage ---
+FROM codercom/code-server:latest as builder
 
-# Step 2: Set arguments for tool versions for easy updates.
+# Set arguments for tool versions.
 ARG MINIFORGE_VERSION=23.11.0-0
 ARG PYTHON_VERSION=3.11
 
-# Step 3: Define environment variables for paths and timezone.
+# Define global environment variables for paths and timezone.
+# This makes the toolchain available to ALL subsequent users (root and coder).
 ENV CONDA_DIR=/opt/conda
-ENV UV_DIR=/home/coder/.local
-ENV PATH=${CONDA_DIR}/bin:${UV_DIR}/bin:${PATH}
+ENV PATH=${CONDA_DIR}/bin:${PATH}
 ENV TZ=Asia/Shanghai
 
-# Step 4: Switch to the ROOT user for system-level installations.
+# --- Installation Phase (as root) ---
 USER root
 
-# Step 5: Install system dependencies, set timezone, and install Miniforge.
 RUN \
-    # Update package lists and install necessary tools.
+    # 1. Install system dependencies.
     apt-get update && apt-get install -y --no-install-recommends \
         wget \
         curl \
         git \
         build-essential \
         tzdata \
-    # Set the timezone non-interactively.
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
-    # Download and install Miniforge.
+    \
+    # 2. Install Miniforge (Conda).
     && wget "https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh" -O miniforge.sh \
     && /bin/bash miniforge.sh -b -p ${CONDA_DIR} \
     && rm miniforge.sh \
-    # Give the 'coder' user ownership of the conda directory.
-    && chown -R coder:coder ${CONDA_DIR} \
-    # Create symbolic links for 'conda' and 'python3' for easier root access (debugging).
-    && ln -s ${CONDA_DIR}/bin/conda /usr/local/bin/conda \
-    && ln -s ${CONDA_DIR}/bin/python /usr/local/bin/python3 \
-    # Clean up apt cache to reduce image size.
+    \
+    # 3. Initialize Conda for the root's shell (useful for subsequent RUN commands).
+    && conda init bash && . /root/.bashrc \
+    \
+    # 4. Install 'uv' into the base conda environment for system-wide access.
+    && conda install -n base uv -c conda-forge -y \
+    \
+    # 5. Create the target Python environment.
+    && conda create -n py${PYTHON_VERSION} python=${PYTHON_VERSION} -y \
+    \
+    # 6. Install core libraries into the new environment using 'uv'.
+    && uv pip install --python=${CONDA_DIR}/envs/py${PYTHON_VERSION}/bin/python \
+        numpy \
+        pandas \
+        matplotlib \
+    \
+    # 7. Ensure the 'coder' user home directory exists and has correct ownership.
+    && mkdir -p /home/coder && chown -R coder:coder /home/coder \
+    \
+    # 8. Clean up to reduce image size.
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Step 6: Switch back to the standard, non-root 'coder' user.
+
+# --- User Configuration Phase (as coder) ---
 USER coder
 
-# Step 7: As the 'coder' user, install 'uv', configure it, and create the environment.
 RUN \
-    # Install 'uv' (the fast Python package manager).
-    curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    \
-    # Create the configuration directory for uv.
+    # 1. Create the user-specific mirror configuration for 'uv'.
     mkdir -p ~/.config/uv && \
-    \
-    ### --- [ THE REAL, FINAL FIX IS HERE ] --- ###
-    # Create the uv.toml with the CORRECT format for a global user config.
-    # It does NOT use the [tool.uv] section header.
     printf 'index-url = "https://mirrors.aliyun.com/pypi/simple"\n' > ~/.config/uv/uv.toml && \
     \
-    # Create the default conda environment.
-    conda create -n py${PYTHON_VERSION} python=${PYTHON_VERSION} -y && \
-    \
-    # Pre-install a minimal set of core data science libraries.
-    # This command will now succeed as uv can correctly parse its config.
-    uv pip install --python=${CONDA_DIR}/envs/py${PYTHON_VERSION}/bin/python \
-        numpy \
-        pandas \
-        matplotlib && \
-    \
-    # Configure the shell to automatically activate this environment on login.
+    # 2. Configure the user's shell to auto-activate the system-wide environment.
+    conda init bash && \
     echo "conda activate py${PYTHON_VERSION}" >> ~/.bashrc
 
-# Step 8: The base image's entrypoint will start code-server.
+
+# --- Verification and Final Stage ---
+# This stage ensures both root and coder environments are correctly configured.
+FROM builder
+
+# Final check as ROOT.
+RUN echo "Verifying root environment..." && \
+    python --version && \
+    conda --version && \
+    uv --version && \
+    echo "Root environment check PASSED!"
+
+# Final check as CODER.
+USER coder
+RUN echo "Verifying coder environment..." && \
+    # We must source .bashrc to load the 'conda activate' alias in a non-interactive shell.
+    source ~/.bashrc && \
+    python --version && \
+    uv --version && \
+    echo "Coder environment check PASSED!"
+
+# The base image's CMD is inherited automatically.
+# No need to specify it again.
