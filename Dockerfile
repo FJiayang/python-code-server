@@ -80,8 +80,7 @@ RUN \
     # 2. Install essential VS Code extensions for a rich Python experience.
     # This must be run as the 'coder' user.
     code-server --install-extension ms-python.python \
-                --install-extension njqdev.vscode-python-typehint \
-                --install-extension LittleFoxTeam.vscode-python-test-adapter && \
+                --install-extension detachhead.basedpyright \
     \
     # 3. Configure the user's shell to auto-activate the system-wide environment.
     conda init bash && \
