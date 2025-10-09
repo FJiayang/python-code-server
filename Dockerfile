@@ -38,7 +38,10 @@ RUN \
         git \
         build-essential \
         tzdata \
+        nodejs \
+        npm \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
+    && npm install -g npx \
     \
     # 2. Install Miniforge (Conda).
     && wget "https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh" -O miniforge.sh \
