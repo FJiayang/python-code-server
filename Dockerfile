@@ -13,8 +13,6 @@
 # - Root & Coder Access: All tools are available for all users.
 # - Optimization (China): Timezone set to Asia/Shanghai, PyPI mirror configured.
 # - Pre-installed Libraries: A minimal set (numpy, pandas, matplotlib).
-# - Extensions Persistence: Extensions installed to system-wide location.
-# - Auto Git Config: Automatically configures git user from environment variables.
 # ==============================================================================
 
 # --- Build Stage ---
@@ -29,9 +27,6 @@ ARG NODE_VERSION=20
 ENV CONDA_DIR=/opt/conda
 ENV PATH=${CONDA_DIR}/bin:${PATH}
 ENV TZ=Asia/Shanghai
-# 设置扩展安装到系统目录
-ENV VSCODE_EXTENSIONS_DIR=/opt/code-server/extensions
-# Git 配置默认值
 ENV GIT_USER_EMAIL="code-server@fjy8018.top"
 ENV GIT_USER_NAME="fjy8018"
 
@@ -50,6 +45,8 @@ RUN \
         gnupg \
     \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
+    && git config --global user.email "$GIT_EMAIL" \
+    && git config --global user.name "$GIT_NAME" \
     \
     # Install Node.js from official repository.
     && mkdir -p /etc/apt/keyrings \
@@ -77,36 +74,14 @@ RUN \
         pandas \
         matplotlib \
     \
-    # 7. Create system-wide extensions directory
-    && mkdir -p ${VSCODE_EXTENSIONS_DIR} \
-    && chmod 755 ${VSCODE_EXTENSIONS_DIR} \
-    \
-    # 8. Ensure the 'coder' user home directory exists and has correct ownership.
+    # 7. Ensure the 'coder' user home directory exists and has correct ownership.
     && mkdir -p /home/coder && chown -R coder:coder /home/coder \
     \
-    # 9. Clean up to reduce image size.
+    # 8. Clean up to reduce image size.
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Extensions Installation Phase (as root) ---
-# 以 root 身份安装扩展到系统目录
-RUN \
-    # 安装 Python 相关扩展到系统目录
-    code-server --extensions-dir=${VSCODE_EXTENSIONS_DIR} \
-                --install-extension ms-python.python \
-                --install-extension detachhead.basedpyright \
-                --install-extension ms-python.autopep8 \
-                --install-extension ms-python.flake8 \
-    \
-    # 设置扩展目录权限，让 coder 用户也能读取
-    && chown -R root:root ${VSCODE_EXTENSIONS_DIR} \
-    && chmod -R 755 ${VSCODE_EXTENSIONS_DIR}
 
-# --- Git Configuration Script ---
-# 创建 Git 配置脚本
-RUN git config --global user.email "$GIT_EMAIL" \
-    && git config --global user.name "$GIT_NAME"
-    
 # --- User Configuration Phase (as coder) ---
 USER coder
 
@@ -115,39 +90,16 @@ RUN \
     mkdir -p ~/.config/uv && \
     printf 'index-url = "https://mirrors.aliyun.com/pypi/simple"\n' > ~/.config/uv/uv.toml && \
     \
-    # 2. 创建 code-server 配置目录和配置文件
-    mkdir -p ~/.config/code-server && \
-    printf 'bind-addr: 0.0.0.0:8080\nauth: none\ncert: false\nextensions-dir: %s\n' "${VSCODE_EXTENSIONS_DIR}" > ~/.config/code-server/config.yaml && \
+    ### --- [ NEW FEATURE: PRE-INSTALL EXTENSIONS ] --- ###
+    # 2. Install essential VS Code extensions for a rich Python experience.
+    # This must be run as the 'coder' user.
+    code-server --install-extension ms-python.python \
+                --install-extension detachhead.basedpyright \
     \
     # 3. Configure the user's shell to auto-activate the system-wide environment.
     conda init bash && \
-    echo "conda activate py${PYTHON_VERSION}" >> ~/.bashrc && \
-    \
-    # 4. 在用户的 .bashrc 中添加 Git 配置初始化
-    echo "" >> ~/.bashrc && \
-    echo "# Auto-configure Git on first login" >> ~/.bashrc && \
-    echo "if [ ! -f ~/.git-configured ]; then" >> ~/.bashrc && \
-    echo "    /usr/local/bin/setup-git.sh" >> ~/.bashrc && \
-    echo "    touch ~/.git-configured" >> ~/.bashrc && \
-    echo "fi" >> ~/.bashrc
+    echo "conda activate py${PYTHON_VERSION}" >> ~/.bashrc
 
-# --- Startup Script ---
-# 创建启动脚本来处理环境变量
-USER root
-RUN cat > /usr/local/bin/entrypoint.sh << 'EOF'
-#!/bin/bash
-
-# 运行 Git 配置脚本
-/usr/local/bin/setup-git.sh
-
-# 切换到 coder 用户并启动 code-server
-exec gosu coder "$@"
-EOF
-
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
-# 安装 gosu（如果基础镜像没有的话）
-RUN apt-get update && apt-get install -y gosu && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --- Verification and Final Stage ---
 FROM builder
@@ -159,10 +111,6 @@ RUN echo "Verifying root environment..." && \
     uv --version && \
     npm -v && \
     node -v && \
-    echo "Installed extensions:" && \
-    ls -la ${VSCODE_EXTENSIONS_DIR} && \
-    echo "Git setup script:" && \
-    ls -la /usr/local/bin/setup-git.sh && \
     echo "Root environment check PASSED!"
 
 # Final check as CODER.
@@ -171,14 +119,8 @@ RUN echo "Verifying coder environment..." && \
     . ~/.bashrc && \
     python --version && \
     uv --version && \
-    echo "Extensions directory accessible:" && \
-    ls -l ${VSCODE_EXTENSIONS_DIR} && \
-    echo "Code-server config:" && \
-    cat ~/.config/code-server/config.yaml && \
+    # Also verify that extensions are installed by checking the directory.
+    ls -l ~/.local/share/code-server/extensions && \
     echo "Coder environment check PASSED!"
-
-# 设置入口点
-USER root
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # The base image's CMD is inherited automatically.
