@@ -21,6 +21,7 @@ FROM codercom/code-server:latest AS builder
 # Set arguments for tool versions.
 ARG MINIFORGE_VERSION=23.11.0-0
 ARG PYTHON_VERSION=3.11
+ARG NODE_VERSION=20
 
 # Define global environment variables for paths and timezone.
 ENV CONDA_DIR=/opt/conda
@@ -38,10 +39,12 @@ RUN \
         git \
         build-essential \
         tzdata \
-        nodejs \
-        npm \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
-    && npm install -g npx \
+    # Install Node.js from official repository.
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y nodejs \
     \
     # 2. Install Miniforge (Conda).
     && wget "https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh" -O miniforge.sh \
@@ -98,6 +101,8 @@ RUN echo "Verifying root environment..." && \
     python --version && \
     conda --version && \
     uv --version && \
+    npm -v && \
+    node -v && \
     echo "Root environment check PASSED!"
 
 # Final check as CODER.
