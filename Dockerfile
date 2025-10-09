@@ -14,6 +14,7 @@
 # - Optimization (China): Timezone set to Asia/Shanghai, PyPI mirror configured.
 # - Pre-installed Libraries: A minimal set (numpy, pandas, matplotlib).
 # - Extensions Persistence: Extensions installed to system-wide location.
+# - Auto Git Config: Automatically configures git user from environment variables.
 # ==============================================================================
 
 # --- Build Stage ---
@@ -30,6 +31,9 @@ ENV PATH=${CONDA_DIR}/bin:${PATH}
 ENV TZ=Asia/Shanghai
 # 设置扩展安装到系统目录
 ENV VSCODE_EXTENSIONS_DIR=/opt/code-server/extensions
+# Git 配置默认值
+ENV GIT_USER_EMAIL="code-server@fjy8018.top"
+ENV GIT_USER_NAME="fjy8018"
 
 # --- Installation Phase (as root) ---
 USER root
@@ -98,6 +102,36 @@ RUN \
     && chown -R root:root ${VSCODE_EXTENSIONS_DIR} \
     && chmod -R 755 ${VSCODE_EXTENSIONS_DIR}
 
+# --- Git Configuration Script ---
+# 创建 Git 配置脚本
+RUN cat > /usr/local/bin/setup-git.sh << 'EOF'
+#!/bin/bash
+
+# 获取环境变量，如果未设置则使用默认值
+GIT_EMAIL="${GIT_USER_EMAIL:-code-server@fjy8018.top}"
+GIT_NAME="${GIT_USER_NAME:-fjy8018}"
+
+echo "Configuring Git with:"
+echo "  Email: $GIT_EMAIL"
+echo "  Name: $GIT_NAME"
+
+# 配置全局 Git 设置
+git config --global user.email "$GIT_EMAIL"
+git config --global user.name "$GIT_NAME"
+
+# 设置一些有用的 Git 默认配置
+git config --global init.defaultBranch main
+git config --global pull.rebase false
+git config --global core.autocrlf input
+git config --global core.editor "code-server --wait"
+
+echo "Git configuration completed!"
+git config --global --list | grep -E "(user\.|init\.|pull\.|core\.)"
+EOF
+
+# 使脚本可执行
+RUN chmod +x /usr/local/bin/setup-git.sh
+
 # --- User Configuration Phase (as coder) ---
 USER coder
 
@@ -112,7 +146,33 @@ RUN \
     \
     # 3. Configure the user's shell to auto-activate the system-wide environment.
     conda init bash && \
-    echo "conda activate py${PYTHON_VERSION}" >> ~/.bashrc
+    echo "conda activate py${PYTHON_VERSION}" >> ~/.bashrc && \
+    \
+    # 4. 在用户的 .bashrc 中添加 Git 配置初始化
+    echo "" >> ~/.bashrc && \
+    echo "# Auto-configure Git on first login" >> ~/.bashrc && \
+    echo "if [ ! -f ~/.git-configured ]; then" >> ~/.bashrc && \
+    echo "    /usr/local/bin/setup-git.sh" >> ~/.bashrc && \
+    echo "    touch ~/.git-configured" >> ~/.bashrc && \
+    echo "fi" >> ~/.bashrc
+
+# --- Startup Script ---
+# 创建启动脚本来处理环境变量
+USER root
+RUN cat > /usr/local/bin/entrypoint.sh << 'EOF'
+#!/bin/bash
+
+# 运行 Git 配置脚本
+/usr/local/bin/setup-git.sh
+
+# 切换到 coder 用户并启动 code-server
+exec gosu coder "$@"
+EOF
+
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# 安装 gosu（如果基础镜像没有的话）
+RUN apt-get update && apt-get install -y gosu && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --- Verification and Final Stage ---
 FROM builder
@@ -126,6 +186,8 @@ RUN echo "Verifying root environment..." && \
     node -v && \
     echo "Installed extensions:" && \
     ls -la ${VSCODE_EXTENSIONS_DIR} && \
+    echo "Git setup script:" && \
+    ls -la /usr/local/bin/setup-git.sh && \
     echo "Root environment check PASSED!"
 
 # Final check as CODER.
@@ -139,5 +201,9 @@ RUN echo "Verifying coder environment..." && \
     echo "Code-server config:" && \
     cat ~/.config/code-server/config.yaml && \
     echo "Coder environment check PASSED!"
+
+# 设置入口点
+USER root
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # The base image's CMD is inherited automatically.
