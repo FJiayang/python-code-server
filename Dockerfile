@@ -39,6 +39,8 @@ RUN \
         git \
         build-essential \
         tzdata \
+        ca-certificates \
+        gnupg \
     \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     \
