@@ -104,34 +104,9 @@ RUN \
 
 # --- Git Configuration Script ---
 # 创建 Git 配置脚本
-RUN cat > /usr/local/bin/setup-git.sh << 'EOF'
-#!/bin/bash
-
-# 获取环境变量，如果未设置则使用默认值
-GIT_EMAIL="${GIT_USER_EMAIL:-code-server@fjy8018.top}"
-GIT_NAME="${GIT_USER_NAME:-fjy8018}"
-
-echo "Configuring Git with:"
-echo "  Email: $GIT_EMAIL"
-echo "  Name: $GIT_NAME"
-
-# 配置全局 Git 设置
-git config --global user.email "$GIT_EMAIL"
-git config --global user.name "$GIT_NAME"
-
-# 设置一些有用的 Git 默认配置
-git config --global init.defaultBranch main
-git config --global pull.rebase false
-git config --global core.autocrlf input
-git config --global core.editor "code-server --wait"
-
-echo "Git configuration completed!"
-git config --global --list | grep -E "(user\.|init\.|pull\.|core\.)"
-EOF
-
-# 使脚本可执行
-RUN chmod +x /usr/local/bin/setup-git.sh
-
+RUN git config --global user.email "$GIT_EMAIL" \
+    && git config --global user.name "$GIT_NAME"
+    
 # --- User Configuration Phase (as coder) ---
 USER coder
 
