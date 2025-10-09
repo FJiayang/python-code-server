@@ -13,6 +13,7 @@
 # - Root & Coder Access: All tools are available for all users.
 # - Optimization (China): Timezone set to Asia/Shanghai, PyPI mirror configured.
 # - Pre-installed Libraries: A minimal set (numpy, pandas, matplotlib).
+# - Extensions Persistence: Extensions installed to system-wide location.
 # ==============================================================================
 
 # --- Build Stage ---
@@ -27,6 +28,8 @@ ARG NODE_VERSION=20
 ENV CONDA_DIR=/opt/conda
 ENV PATH=${CONDA_DIR}/bin:${PATH}
 ENV TZ=Asia/Shanghai
+# 设置扩展安装到系统目录
+ENV VSCODE_EXTENSIONS_DIR=/opt/code-server/extensions
 
 # --- Installation Phase (as root) ---
 USER root
@@ -70,13 +73,30 @@ RUN \
         pandas \
         matplotlib \
     \
-    # 7. Ensure the 'coder' user home directory exists and has correct ownership.
+    # 7. Create system-wide extensions directory
+    && mkdir -p ${VSCODE_EXTENSIONS_DIR} \
+    && chmod 755 ${VSCODE_EXTENSIONS_DIR} \
+    \
+    # 8. Ensure the 'coder' user home directory exists and has correct ownership.
     && mkdir -p /home/coder && chown -R coder:coder /home/coder \
     \
-    # 8. Clean up to reduce image size.
+    # 9. Clean up to reduce image size.
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# --- Extensions Installation Phase (as root) ---
+# 以 root 身份安装扩展到系统目录
+RUN \
+    # 安装 Python 相关扩展到系统目录
+    code-server --extensions-dir=${VSCODE_EXTENSIONS_DIR} \
+                --install-extension ms-python.python \
+                --install-extension detachhead.basedpyright \
+                --install-extension ms-python.autopep8 \
+                --install-extension ms-python.flake8 \
+    \
+    # 设置扩展目录权限，让 coder 用户也能读取
+    && chown -R root:root ${VSCODE_EXTENSIONS_DIR} \
+    && chmod -R 755 ${VSCODE_EXTENSIONS_DIR}
 
 # --- User Configuration Phase (as coder) ---
 USER coder
@@ -86,16 +106,13 @@ RUN \
     mkdir -p ~/.config/uv && \
     printf 'index-url = "https://mirrors.aliyun.com/pypi/simple"\n' > ~/.config/uv/uv.toml && \
     \
-    ### --- [ NEW FEATURE: PRE-INSTALL EXTENSIONS ] --- ###
-    # 2. Install essential VS Code extensions for a rich Python experience.
-    # This must be run as the 'coder' user.
-    code-server --install-extension ms-python.python \
-                --install-extension detachhead.basedpyright \
+    # 2. 创建 code-server 配置目录和配置文件
+    mkdir -p ~/.config/code-server && \
+    printf 'bind-addr: 0.0.0.0:8080\nauth: none\ncert: false\nextensions-dir: %s\n' "${VSCODE_EXTENSIONS_DIR}" > ~/.config/code-server/config.yaml && \
     \
     # 3. Configure the user's shell to auto-activate the system-wide environment.
     conda init bash && \
     echo "conda activate py${PYTHON_VERSION}" >> ~/.bashrc
-
 
 # --- Verification and Final Stage ---
 FROM builder
@@ -107,6 +124,8 @@ RUN echo "Verifying root environment..." && \
     uv --version && \
     npm -v && \
     node -v && \
+    echo "Installed extensions:" && \
+    ls -la ${VSCODE_EXTENSIONS_DIR} && \
     echo "Root environment check PASSED!"
 
 # Final check as CODER.
@@ -115,8 +134,10 @@ RUN echo "Verifying coder environment..." && \
     . ~/.bashrc && \
     python --version && \
     uv --version && \
-    # Also verify that extensions are installed by checking the directory.
-    ls -l ~/.local/share/code-server/extensions && \
+    echo "Extensions directory accessible:" && \
+    ls -l ${VSCODE_EXTENSIONS_DIR} && \
+    echo "Code-server config:" && \
+    cat ~/.config/code-server/config.yaml && \
     echo "Coder environment check PASSED!"
 
 # The base image's CMD is inherited automatically.
