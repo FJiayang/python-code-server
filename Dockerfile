@@ -39,6 +39,9 @@ RUN \
         wget \
         curl \
         git \
+        tar \
+        zip \
+        unzip \
         build-essential \
         tzdata \
         ca-certificates \
