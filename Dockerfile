@@ -57,6 +57,15 @@ RUN \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
     && apt-get update && apt-get install -y nodejs \
     \
+    # Install kubectl (latest stable version).
+    && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/ \
+    \
+    # Install argocd CLI (latest version).
+    && curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64 \
+    && chmod +x /usr/local/bin/argocd \
+    \
     # 2. Install Miniforge (Conda).
     && wget "https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh" -O miniforge.sh \
     && /bin/bash miniforge.sh -b -p ${CONDA_DIR} \
@@ -114,6 +123,8 @@ RUN echo "Verifying root environment..." && \
     uv --version && \
     npm -v && \
     node -v && \
+    kubectl version --client && \
+    argocd version --client && \
     echo "Root environment check PASSED!"
 
 # Final check as CODER.
